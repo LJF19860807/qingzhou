@@ -64,6 +64,12 @@ body::before{
 .header-right{text-align:right}
 .header-date{font-size:10px;color:var(--text2);letter-spacing:.5px}
 .header-time{font-size:14px;color:var(--cyan);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:1px}
+.header-install{
+  margin-top:4px;padding:4px 10px;font-size:10px;border-radius:6px;
+  background:rgba(0,229,255,.08);color:var(--cyan);border:1px solid rgba(0,229,255,.2);
+  cursor:pointer;transition:all .2s;white-space:nowrap;
+}
+.header-install:active{background:rgba(0,229,255,.2)}
 
 /* ============ PAGES ============ */
 .page{display:none;padding:12px 14px;animation:fadeUp .4s ease;position:relative;z-index:1}
@@ -382,6 +388,7 @@ body::before{
     <div class="header-time" id="headerTime">--:--</div>
     <div class="header-date" id="headerDate">----</div>
   </div>
+  <button class="header-install" id="installBtn" onclick="handleInstall()" style="display:none">📲 安装到主屏幕</button>
 </header>
 
 <!-- ==================== 数据大屏 ==================== -->
@@ -611,6 +618,22 @@ body::before{
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal('modalImport')">取消</button>
       <button class="btn btn-primary" onclick="doImport()">导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- iOS Install Guide -->
+<div class="modal-overlay" id="modalIOSHelp">
+  <div class="modal">
+    <h2>添加到主屏幕</h2>
+    <div style="font-size:13px;color:var(--text2);line-height:1.8">
+      iPhone / iPad 请这样操作：<br><br>
+      ① 点底部 <strong style="color:var(--cyan)">分享按钮</strong>（方框中向上箭头）<br><br>
+      ② 在菜单中选择 <strong style="color:var(--cyan)">添加到主屏幕</strong><br><br>
+      ③ 点右上角 <strong style="color:var(--cyan)">添加</strong>，完成！
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal('modalIOSHelp')">知道了</button>
     </div>
   </div>
 </div>
@@ -1558,6 +1581,60 @@ function renderAll(){
 
 document.querySelectorAll('input[type=date]').forEach(el=>{ if(!el.value) el.value=today() });
 renderDashboard();
+
+/* ============================
+   PWA INSTALL SUPPORT
+   ============================ */
+let deferredPrompt = null;
+
+function isIOS(){
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+
+function updateInstallBtn(){
+  const btn = document.getElementById('installBtn');
+  if(!btn) return;
+  if(isStandalone()){ btn.style.display='none'; return; }
+  btn.style.display = (deferredPrompt || isIOS()) ? 'block' : 'none';
+}
+
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  updateInstallBtn();
+});
+
+window.addEventListener('appinstalled', ()=>{
+  deferredPrompt = null;
+  updateInstallBtn();
+  toast('已安装到主屏幕 🎉');
+});
+
+function handleInstall(){
+  if(deferredPrompt){
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(res=>{
+      if(res.outcome==='accepted') toast('正在安装...');
+      else toast('已取消安装','warn');
+      deferredPrompt = null;
+      updateInstallBtn();
+    });
+  } else if(isIOS()){
+    if(isStandalone()){ toast('已是最新安装模式'); return }
+    openModal('modalIOSHelp');
+  } else if(isStandalone()){
+    toast('已是最新安装模式');
+  } else {
+    toast('当前浏览器不支持安装，请用 Chrome 或 Edge 打开','warn');
+  }
+}
+
+// Re-check installability when page becomes visible again
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) updateInstallBtn() });
+
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 
 let _resizeTimer;
